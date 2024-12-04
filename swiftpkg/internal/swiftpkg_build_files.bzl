@@ -13,6 +13,10 @@ load(":pkginfo_target_deps.bzl", "pkginfo_target_deps")
 load(":pkginfo_targets.bzl", "pkginfo_targets")
 load(":pkginfos.bzl", "build_setting_kinds", "module_types", "pkginfos", "target_types")
 load(":starlark_codegen.bzl", scg = "starlark_codegen")
+load(
+    "//config_settings/spm/platform:platforms.bzl",
+    spm_platforms = "platforms",
+)
 
 _STRING_TYPE = type("")
 
@@ -138,6 +142,22 @@ def _swift_target_build_file(pkg_ctx, target):
             for bs in target.swift_settings.experimental_features:
                 copts.append("-enable-experimental-feature")
                 copts.extend(lists.flatten(bzl_selects.new_from_build_setting(bs)))
+
+    # Target the appropriate platform version.
+    minimum_os_version = [bzl_selects.new(
+        value = platform.version,
+        kind = "minimumOsVersion",
+        condition = spm_platforms.label(platform.name),
+    ) for platform in pkg_ctx.pkg_info.platforms if spm_platforms.is_supported(platform.name)]
+
+    if len(minimum_os_version) > 0:
+        attrs["minimum_os_version"] = bzl_selects.to_starlark(
+            minimum_os_version,
+            {"minimumOsVersion": bzl_selects.new_kind_handler(default = "oldest")},
+            single_value_select = True,
+        )
+    else:
+        attrs["minimum_os_version"] = "oldest"
 
     if len(copts) > 0:
         attrs["copts"] = bzl_selects.to_starlark(copts, mutually_inclusive = True)

@@ -133,7 +133,7 @@ _noop_kind_handler = _new_kind_handler(
     transform = lambda v: v,
 )
 
-def _to_starlark(values, kind_handlers = {}, mutually_inclusive = False):
+def _to_starlark(values, kind_handlers = {}, mutually_inclusive = False, single_value_select = False):
     """Converts the provied values into Starlark using the information in the \
     kind handlers.
 
@@ -144,6 +144,8 @@ def _to_starlark(values, kind_handlers = {}, mutually_inclusive = False):
         mutually_inclusive: A `bool` that determines if multiple select
             expressions should be generated so that the conditions
             are mutually inclusive.
+        single_value_select: Set to `True` to expect a single value for each
+            select statement instead of a list.
 
     Returns:
         A `struct` as returned by `starlark_codegen.new_expr`.
@@ -191,13 +193,13 @@ def _to_starlark(values, kind_handlers = {}, mutually_inclusive = False):
             # Generate multiple select expressions for each condition.
             for k in sorted_keys:
                 new_dict = {
-                    k: sets.to_list(select_dict[k]),
+                    k: _get_values(k, select_dict, single_value_select),
                 }
                 _append_select(expr_members, kind_handler, new_dict)
         else:
             # Combine all conditions of the same kind into one select expression.
             new_dict = {
-                k: sets.to_list(select_dict[k])
+                k: _get_values(k, select_dict, single_value_select)
                 for k in sorted_keys
             }
             _append_select(expr_members, kind_handler, new_dict)
@@ -208,6 +210,16 @@ No Starlark expression members were generated for {}\
 """.format(values))
 
     return scg.new_expr(*expr_members)
+
+def _get_values(k, select_dict, single_value_select):
+    select_values = sets.to_list(select_dict[k])
+    if single_value_select:
+        if len(select_values) > 1:
+            fail("Expected a single value for condition \"{}\" but got more than one value: {}".format(k, select_values))
+
+        return select_values[0]
+    else:
+        return select_values
 
 def _append_select(expr_members, kind_handler, select_dict):
     if len(expr_members) > 0:
